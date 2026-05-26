@@ -99,9 +99,38 @@ jobs:
           if [ ! -x bin/gn ]; then python3 bin/fetch-gn; fi
           bin/gn gen out/canvaskit_pdf
 
+      - name: List available canvaskit targets (diagnostic)
+        working-directory: ${{ env.SKIA_DIR }}
+        run: |
+          echo "::group::All targets containing 'canvas'"
+          ninja -C out/canvaskit_pdf -t targets all 2>/dev/null | grep -iE 'canvas' | head -50 || true
+          echo "::endgroup::"
+          echo "::group::Top-level phony targets"
+          ninja -C out/canvaskit_pdf -t targets rule phony 2>/dev/null | head -30 || true
+          echo "::endgroup::"
+
       - name: Build (ninja canvaskit)
         working-directory: ${{ env.SKIA_DIR }}
-        run: ninja -C out/canvaskit_pdf canvaskit
+        run: |
+          set -e
+          # Modern Skia may expose canvaskit under a namespaced path. Try
+          # several known names in order.
+          CANDIDATES=(
+            "canvaskit"
+            "modules/canvaskit/canvaskit"
+            "modules/canvaskit:canvaskit"
+            "canvaskit.js"
+          )
+          for t in "${CANDIDATES[@]}"; do
+            echo "Trying ninja target: $t"
+            if ninja -C out/canvaskit_pdf "$t"; then
+              echo "Built via target: $t"
+              exit 0
+            fi
+          done
+          echo "None of the candidate targets worked. Available canvas* targets:"
+          ninja -C out/canvaskit_pdf -t targets all | grep -i canvas | head -50
+          exit 1
 
       - name: Stage artifacts
         run: |
