@@ -26,10 +26,24 @@ using namespace emscripten;
 
 namespace {
 
+// Construct PDF metadata that doesn't require linking in a JPEG codec.
+// CanvasKit-wasm is built without libjpeg-turbo, so without `allowNoJpegs=true`
+// SkPDF fatal-errors on document creation
+// ("Must set both a jpegDecoder and jpegEncoder to create PDFs").
+// PNG sprites end up flate-encoded inside the PDF — slightly larger than JPEG
+// would be, but still valid vector + image XObject content.
+static SkPDF::Metadata makePdfMetadata() {
+    SkPDF::Metadata m;
+    m.allowNoJpegs = true;
+    return m;
+}
+
 class PDFDocumentJS : public SkRefCnt {
 public:
     PDFDocumentJS()
-        : fStream(), fDoc(SkPDF::MakeDocument(&fStream)), fClosed(false) {}
+        : fStream(),
+          fDoc(SkPDF::MakeDocument(&fStream, makePdfMetadata())),
+          fClosed(false) {}
 
     ~PDFDocumentJS() override {
         if (!fClosed && fDoc) {
