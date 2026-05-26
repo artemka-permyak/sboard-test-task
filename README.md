@@ -1,201 +1,225 @@
 # Pixi → Skia → PDF
 
-TypeScript app that builds an intermediate **Scene Tree** from a
-`PIXI.Container` and feeds it to two independent backends:
+Тестовое задание на TypeScript: приложение собирает промежуточное
+**Scene Tree** из `PIXI.Container` и скармливает его двум независимым
+бэкендам:
 
-1. an **on-screen Skia (CanvasKit)** renderer, and
-2. a **vector PDF** exporter — using a real PDF writer that emits
-   genuine PDF graphics operators (`re`, `f`, `S`, `m`/`l`, cubic-bezier
-   ellipse approximation, `cm` transforms). **No `toDataURL`, no
-   `html2canvas`, no rasterized canvas.** PNG sprites are embedded as
-   image XObjects (the only allowed raster content per the spec).
+1. **on-screen Skia (CanvasKit)** рендеру, и
+2. **векторному PDF**-экспортёру, который пишет настоящие графические
+   операторы PDF (`re`, `f`, `S`, `m`/`l`, cubic-bezier аппроксимация
+   эллипса, `cm`-трансформы). **Никаких `toDataURL`, `html2canvas` или
+   растрового снимка canvas.** PNG-спрайты вставляются как image
+   XObject — это единственная допустимая растровая часть согласно ТЗ.
 
-Both canvases stay in sync; pointer events work on both (Pixi natively;
-Skia via a custom hit-test that dispatches back onto the original
-`PIXI.DisplayObject`).
+Оба канваса синхронизированы. Pointer-события работают на обоих —
+в Pixi штатно, в Skia через свой hit-test, который диспатчит обратно
+на оригинальный `PIXI.DisplayObject`.
 
-## Quick start
+Репозиторий: <https://github.com/artemka-permyak/sboard-test-task>
+
+## Быстрый старт
 
 ```bash
 npm install
 npm run dev
-# open http://localhost:5173
+# открыть http://localhost:5173
 ```
 
-The status bar shows which PDF backend is active:
+В статус-баре видно активный PDF-бэкенд:
 
 > Ready · N display objects · PDF: pdf-lib (fallback)
 
-That "fallback" wording is honest about the architecture (see below) — the
-PDF you download is genuinely vector either way. Verify it:
+Слово «fallback» отражает архитектуру (см. ниже) — скачанный PDF в любом
+случае векторный. Образец лежит в репо:
 
 ```bash
-node scripts/generate-sample-pdf.mjs   # writes samples/sample.pdf
-# samples/sample.pdf is committed; inspect with any PDF viewer
+node scripts/generate-sample-pdf.mjs   # переписывает samples/sample.pdf
+open samples/sample.pdf                # либо открыть любым PDF-вьюером
 ```
 
-## PDF backends
+## Два PDF-бэкенда
 
-The `src/pdf/exportToPdf.ts` dispatcher checks at runtime whether the
-loaded CanvasKit exposes `MakePDFDocument()`:
+Диспатчер `src/pdf/exportToPdf.ts` смотрит в рантайме, есть ли у
+загруженного CanvasKit метод `MakePDFDocument()`:
 
-| Backend | When it runs | Output |
+| Бэкенд | Когда активен | Что пишет |
 | --- | --- | --- |
-| **SkPDF** via custom CanvasKit | `public/canvaskit/canvaskit.{js,wasm}` exists | Real Skia PDF |
-| **pdf-lib** (default) | Otherwise | Vector PDF emitted from the same scene tree |
+| **SkPDF** через кастомный CanvasKit | существует `public/canvaskit/canvaskit.{js,wasm}` | Настоящий Skia PDF |
+| **pdf-lib** (по умолчанию) | иначе | Векторный PDF из той же scene tree |
 
-Both backends consume the **same intermediate scene tree** (`src/scene/sceneTree.ts`).
-The scene-tree → primitives mapping (rect, ellipse, line, polygon path,
-sprite, group with transform) is identical, so the visual content is the
-same — only the encoder differs. Swapping in real SkPDF is a one-file
-replacement.
+Оба бэкенда читают **одно и то же промежуточное Scene Tree**
+(`src/scene/sceneTree.ts`). Маппинг scene-tree → примитивы (rect,
+ellipse, line, polygon path, sprite, group с transform) одинаков —
+визуально результат идентичен, отличается только энкодер. Подмена
+pdf-lib на настоящий SkPDF — это замена ровно одного файла.
 
-The custom-CanvasKit build infrastructure lives in
-[`build-canvaskit-pdf/`](build-canvaskit-pdf/README.md): Dockerfile,
-Embind C++ bindings extension, GN args, retry-aware build script. **It
-requires a reliable network to clone Skia's ~50 third-party deps** via
-`tools/git-sync-deps` from `googlesource.com`. If that step fails in your
-environment, the app keeps working on the pdf-lib path — equivalent
-vector output, no architectural debt.
+### Как получить настоящий SkPDF
 
-For environments where local Docker can't reach googlesource.com
-reliably, there's a GitHub Actions workflow
-[`.github/workflows/build-canvaskit.yml`](.github/workflows/build-canvaskit.yml)
-that runs the same build on an Ubuntu runner and uploads
-`canvaskit.{js,wasm}` as a downloadable artifact:
+Стоковый `canvaskit-wasm` собран без `SkPDF`. Чтобы получить настоящий
+Skia PDF, нужна кастомная сборка CanvasKit с флагом `skia_use_pdf=true`
+и Embind-биндингами `MakePDFDocument` — вся инфраструктура лежит в
+[`build-canvaskit-pdf/`](build-canvaskit-pdf/README.md) (Dockerfile,
+C++ биндинги, GN args, build-скрипт).
 
-1. Push the repo to GitHub.
-2. Actions tab → **Build CanvasKit with SkPDF** → **Run workflow**.
-3. When it finishes, download the `canvaskit-pdf` artifact, unzip into
-   `public/canvaskit/`, commit, push.
-4. Status bar now shows **`PDF: SkPDF`** and `Export PDF` writes a real
-   Skia PDF.
+Локальная Docker-сборка требует стабильной сети до `googlesource.com`
+для клонирования ~50 third-party deps Skia. На macOS под vpnkit это
+часто не получается. Для таких случаев есть GitHub Actions:
+
+[**.github/workflows/build-canvaskit.yml**](.github/workflows/build-canvaskit.yml)
+
+1. Открыть **Actions → Build CanvasKit with SkPDF → Run workflow**.
+2. Подождать ~30-50 минут (большая часть — компиляция Skia).
+3. Скачать артефакт `canvaskit-pdf` (zip ~3-7 MB).
+4. Распаковать `canvaskit.{js,wasm}` в `public/canvaskit/`, закоммитить,
+   запушить.
+5. Статус-бар покажет **`PDF: SkPDF`** — экспорт пойдёт через настоящий
+   Skia.
 
 ## Production build
 
 ```bash
 npm run build        # tsc --noEmit && vite build → dist/
-npm run preview      # serve dist/ locally
+npm run preview      # отдать dist/ локально
 ```
 
-If `public/canvaskit/canvaskit.{js,wasm}` exist when you build, Vite copies
-them into `dist/canvaskit/` and the deployed app uses SkPDF. Otherwise it
-ships with pdf-lib only — that's fine for a demo deploy.
+Если на момент сборки в `public/canvaskit/` лежат `canvaskit.{js,wasm}`,
+Vite скопирует их в `dist/canvaskit/`, и задеплоенное приложение
+поедет на SkPDF. Иначе пойдёт с pdf-lib — для демо-деплоя нормально.
 
-## Architecture
+## Архитектура
 
 ```
 PIXI.Container
    │
-   ▼  pixi/pixiToSceneTree.ts   (reads geometry.graphicsData, localTransform)
+   ▼  pixi/pixiToSceneTree.ts   (читает geometry.graphicsData, localTransform)
 Intermediate Scene Tree  (scene/sceneTree.ts)
    │
    ├──▶ skia/skiaRenderer.ts            SkiaSurfaceRenderer → on-screen canvas
    │
    ├──▶ pdf/exportToPdfSkia.ts          SkPDF document   ┐
    │                                                     │  pdf/exportToPdf.ts
-   └──▶ pdf/exportToPdfLib.ts           pdf-lib writer   ┘  picks the backend
+   └──▶ pdf/exportToPdfLib.ts           pdf-lib writer   ┘  выбирает бэкенд
    │
-   └──▶ events/hitTest.ts + skiaPointerEvents.ts → dispatch onto original DisplayObject
+   └──▶ events/hitTest.ts + skiaPointerEvents.ts → dispatch на оригинальный DisplayObject
 ```
 
 ```
 src/
-  scene/sceneTree.ts          Single source of truth for nodes + matrices
-  pixi/                       Pixi setup + Scene Tree converter
+  scene/sceneTree.ts          Единый source of truth для нод + матриц
+  pixi/                       Pixi setup + Scene Tree конвертер
   skia/
-    initSkia.ts               Two-tier loader: custom build → npm fallback
-    skiaRenderer.ts           SceneRenderer (used by surface AND PDF) + SkiaSurfaceRenderer
-    canvaskitPdf.ts           Structural type extension + hasPDFBackend() guard
+    initSkia.ts               Two-tier loader: кастомная сборка → npm fallback
+    skiaRenderer.ts           SceneRenderer (общий для on-screen И PDF) + SkiaSurfaceRenderer
+    canvaskitPdf.ts           Структурное расширение типов + hasPDFBackend() guard
   pdf/
-    exportToPdf.ts            Dispatcher (Skia first, pdf-lib fallback)
+    exportToPdf.ts            Диспатчер (Skia first, pdf-lib fallback)
     exportToPdfSkia.ts        SkPDF document → vector PDF bytes
-    exportToPdfLib.ts         pdf-lib vector writer (same scene tree)
-  events/                     Skia hit-test + dispatch back to Pixi listeners
-  ui/                         DOM bindings + log
-  app/createApp.ts            Wires everything
-  main.ts                     Entry
-build-canvaskit-pdf/          Docker + bindings to build CanvasKit with SkPDF
+    exportToPdfLib.ts         pdf-lib vector writer (та же scene tree)
+  events/                     Skia hit-test + dispatch на Pixi-листенеры
+  ui/                         DOM-биндинги + лог
+  app/createApp.ts            Связывает всё вместе
+  main.ts                     Entry point
+build-canvaskit-pdf/          Docker + биндинги для сборки CanvasKit с SkPDF
+.github/workflows/            GH Actions: сборка CanvasKit на Ubuntu-раннере
 ```
 
-## Stack
+## Стек
 
-- TypeScript 5 (strict)
-- Vite 5
+- TypeScript 6 (strict, `noUnusedLocals`, `noUnusedParameters`)
+- Vite 8
 - `pixi.js-legacy` 7.2.4 (Canvas2D, `forceCanvas: true`)
-- `canvaskit-wasm` 0.39.1 (and/or our custom build with SkPDF)
+- `canvaskit-wasm` 0.41.1 (или наша кастомная сборка с SkPDF)
 - `pdf-lib` 1.17.1 (fallback vector PDF writer)
-- Docker (only for `npm run build:canvaskit`)
+- Docker (опционально, только для `npm run build:canvaskit`)
 
-## Verifying the PDF is vector
+## Проверка PDF на векторность
 
-After `Export PDF`:
+После `Export PDF`:
 
 ```bash
-# 1. Zoom to 1600 % in any PDF viewer — shapes must stay crisp.
+# 1. Зум до 1600 % в любом PDF-вьюере — фигуры остаются ровные.
 
-# 2. There should be 0 images in the page (or only the sprite, if present):
+# 2. Изображений в страничном content stream должно быть 0
+#    (или только спрайт, если он в сцене):
 pdfimages -list pixi-skia-export.pdf
 
-# 3. Convert to SVG — you should see <path>/<rect>/<ellipse>, NOT one giant <image>:
+# 3. Конвертация в SVG — должны увидеть <path>/<rect>/<ellipse>,
+#    а НЕ один большой <image>:
 mutool draw -F svg -o page.svg pixi-skia-export.pdf
 
-# 4. Grep raw PDF operators (re=rect, f=fill, S=stroke, m/l/c=path, cm=transform):
+# 4. Грепнуть сырые PDF-операторы
+#    (re=прямоугольник, f=fill, S=stroke, m/l/c=path, cm=transform):
 qpdf --qdf --object-streams=disable pixi-skia-export.pdf out.pdf
 grep -E '\b(re|f|S|m|l|cm)\b' out.pdf | head
 ```
 
-A successful Skia PDF will additionally have `/Producer (Skia/PDF …)` in
-its metadata; pdf-lib outputs `/Producer (pdf-lib …)`.
+У PDF из SkPDF в метаданных будет `/Producer (Skia/PDF …)`, у
+pdf-lib — `/Producer (pdf-lib …)`.
 
-## Deploy
+В репо коммитнут `samples/sample.pdf` (1 КБ, генерируется Node-скриптом
+`scripts/generate-sample-pdf.mjs` через pdf-lib из аналогичной сцены)
+для быстрой проверки векторности без запуска dev-сервера.
+
+## Деплой
 
 ### Vercel
-1. Push to GitHub.
-2. Import the repo at <https://vercel.com/new>.
+
+1. Push в GitHub (уже сделано).
+2. Импорт репо на <https://vercel.com/new>.
 3. Framework preset: **Vite**. Build command: `npm run build`. Output: `dist`.
+4. Deploy.
 
 ### Netlify
+
 - New site → connect repo.
 - Build command `npm run build`, publish directory `dist`.
 
 ### GitHub Pages
+
 ```bash
 npm run build
 npx gh-pages -d dist
 ```
-`vite.config.ts` has `base: './'` so assets resolve under a subdirectory.
 
-The custom CanvasKit bundle (~3–6 MB) ships from `public/canvaskit/` if
-present. To deploy *without* it (smaller bundle, pdf-lib fallback), simply
-don't run `npm run build:canvaskit` before deploying.
+В `vite.config.ts` стоит `base: './'`, поэтому ассеты резолвятся под
+поддиректорией.
 
-## Limitations
+Кастомный бандл CanvasKit (~3-7 MB) попадает в дист из
+`public/canvaskit/`, если он там лежит. Чтобы задеплоить *без* него
+(меньше бандл, только pdf-lib) — просто не клади файлы в
+`public/canvaskit/` перед сборкой.
 
-- Supported `PIXI.Graphics`: `drawRect`, `drawEllipse`, `drawCircle`,
-  `moveTo`/`lineTo` lines, polygon paths, `beginFill`/`endFill`,
-  `lineStyle`. No masks, filters, blend modes, gradients, text.
-- PNG sprite is embedded in the PDF as an image XObject (allowed by the
-  spec — the source is raster anyway).
-- Hit-test implemented for rect / ellipse / line (lineWidth-aware) /
+## Соответствие ТЗ
+
+| Пункт | Статус |
+|---|---|
+| TypeScript, модульная архитектура, комментарии | ✅ |
+| `pixi.js-legacy@7.2.4`, `forceCanvas: true` | ✅ |
+| Обёртка для Skia, принимающая `PIXI.Container` | ✅ `src/pixi/pixiToSceneTree.ts` + `src/skia/skiaRenderer.ts` |
+| translate / rotate / scale (+ pivot/skew/alpha бонусом) | ✅ через `transform.localTransform` |
+| `PIXI.Graphics`: `drawShape` / `drawRect` / `moveTo` / `lineTo` | ✅ плюс `drawEllipse`/`drawCircle`/`lineStyle`/`begin/endFill` |
+| `PIXI.Sprite` PNG | ✅ |
+| Вложенные контейнеры, рекурсивный обход с матрицами | ✅ |
+| `pointerdown` / `pointerup` на Pixi canvas | ✅ нативно |
+| `pointerdown` / `pointerup` на Skia canvas | ✅ свой hit-test + dispatch на оригинальный DisplayObject |
+| Кнопка «случайная фигура» (один из двух вариантов интерактивности) | ✅ |
+| PDF — векторный, не скриншот canvas | ✅ настоящие операторы PDF, без `toDataURL` |
+| PDF через **Skia PDF backend** (кастомная wasm) | ⚠️ инфраструктура готова (`build-canvaskit-pdf/` + GH Actions); pdf-lib как fallback на той же scene tree |
+| UI с кнопками, просмотром сцены, экспортом PDF | ✅ |
+| `npm run dev/build/preview` | ✅ |
+| Загружено на GitHub | ✅ |
+| Задеплоено на бесплатный хостинг | пушу деплой следующим шагом |
+
+## Ограничения
+
+- Поддерживаемые `PIXI.Graphics`: `drawRect`, `drawEllipse`,
+  `drawCircle`, линии через `moveTo`/`lineTo`, полигоны через
+  `drawPolygon`, `beginFill`/`endFill`, `lineStyle`. Маски, фильтры,
+  blend modes, градиенты и текст не поддержаны.
+- PNG-спрайт вставляется в PDF как image XObject (по ТЗ разрешено —
+  источник растровый).
+- Hit-test реализован для rect / ellipse / line (с учётом lineWidth) /
   polygon / sprite bounds.
-- The default Vite dev port is `5173`; CanvasKit is loaded with absolute
-  `/canvaskit/...` paths, so deploying under a subdirectory needs the
-  `base` to be configured if the path differs.
-
-## Spec compliance checklist
-
-- [x] Skia wrapper accepts `PIXI.Container` and renders it via CanvasKit.
-- [x] translate / rotate / scale supported (and pivot/skew/alpha bonus).
-- [x] `PIXI.Graphics`: `drawShape`/`drawRect`/`moveTo`/`lineTo` (also
-      `drawEllipse`/`drawCircle`/`lineStyle`/`beginFill`/`endFill`).
-- [x] `PIXI.Sprite` (PNG) supported on canvas and in PDF.
-- [x] Nested containers, recursive matrix composition.
-- [x] PDF export via **Skia PDF backend** when custom CanvasKit is built
-      (`build-canvaskit-pdf/`). Vector output, not a rasterized canvas.
-- [x] `pointerdown` / `pointerup` on both canvases — Pixi natively + Skia
-      hit-test that dispatches onto the original `PIXI.DisplayObject`.
-- [x] "Generate random shape" + "Reset scene" + "Export PDF" buttons.
-- [x] TypeScript strict, modular by feature folder.
-- [x] `pixi.js-legacy@7.2.4` with `forceCanvas: true`.
-- [x] `npm install && npm run dev` works on a clean checkout.
+- Vite-dev по умолчанию слушает порт `5173`; CanvasKit грузится по
+  абсолютным `/canvaskit/...` путям, поэтому при деплое под
+  подпапкой нужно подкрутить `base` в `vite.config.ts`.
