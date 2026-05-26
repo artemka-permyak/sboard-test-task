@@ -37,12 +37,18 @@ async function load(): Promise<{ ck: CanvasKit; custom: boolean }> {
 }
 
 async function tryLoadCustom(): Promise<CanvasKit | null> {
+  // Use Vite's BASE_URL so the custom build resolves correctly both at the
+  // dev-server root ('/') and under a subpath ('/sboard-test-task/' on GH Pages).
+  const base = import.meta.env.BASE_URL; // ends with '/'
+  const jsUrl = `${base}canvaskit/canvaskit.js`;
+  const wasmUrl = `${base}canvaskit/canvaskit.wasm`;
+
   // Probe for the custom build. We can't rely on HEAD status alone because
   // Vite's dev server returns 200 + text/html for any missing path (SPA
-  // fallback). We also accept presence of canvaskit.wasm as a positive signal.
+  // fallback). Verify the content-type too.
   let head: Response;
   try {
-    head = await fetch('/canvaskit/canvaskit.js', { method: 'HEAD' });
+    head = await fetch(jsUrl, { method: 'HEAD' });
   } catch {
     return null;
   }
@@ -57,7 +63,7 @@ async function tryLoadCustom(): Promise<CanvasKit | null> {
       return;
     }
     const s = document.createElement('script');
-    s.src = '/canvaskit/canvaskit.js';
+    s.src = jsUrl;
     s.dataset.canvaskit = 'custom';
     s.onload = () => resolve();
     s.onerror = () => reject(new Error('Failed to load custom canvaskit.js'));
@@ -69,5 +75,5 @@ async function tryLoadCustom(): Promise<CanvasKit | null> {
     console.warn('Custom canvaskit.js loaded but did not expose CanvasKitInit');
     return null;
   }
-  return init({ locateFile: () => '/canvaskit/canvaskit.wasm' });
+  return init({ locateFile: () => wasmUrl });
 }

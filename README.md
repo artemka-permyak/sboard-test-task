@@ -15,7 +15,9 @@
 в Pixi штатно, в Skia через свой hit-test, который диспатчит обратно
 на оригинальный `PIXI.DisplayObject`.
 
-Репозиторий: <https://github.com/artemka-permyak/sboard-test-task>
+- Репозиторий: <https://github.com/artemka-permyak/sboard-test-task>
+- Демо: <https://artemka-permyak.github.io/sboard-test-task/> (после первого
+  деплоя через GitHub Pages — см. ниже)
 
 ## Быстрый старт
 
@@ -162,27 +164,28 @@ pdf-lib — `/Producer (pdf-lib …)`.
 
 ## Деплой
 
-### Vercel
+### GitHub Pages (используется)
 
-1. Push в GitHub (уже сделано).
-2. Импорт репо на <https://vercel.com/new>.
-3. Framework preset: **Vite**. Build command: `npm run build`. Output: `dist`.
-4. Deploy.
+Уже настроен через GH Actions: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
 
-### Netlify
+Включение в первый раз:
 
-- New site → connect repo.
-- Build command `npm run build`, publish directory `dist`.
+1. Repo → **Settings → Pages → Build and deployment → Source = GitHub Actions**.
+2. Push в `main` (или Actions → Deploy to GitHub Pages → Run workflow).
+3. Через ~2 минуты доступно на <https://artemka-permyak.github.io/sboard-test-task/>.
 
-### GitHub Pages
+Каждый последующий push в `main` автоматически обновляет деплой.
 
-```bash
-npm run build
-npx gh-pages -d dist
-```
+В `vite.config.ts` стоит `base: './'`, а в `src/skia/initSkia.ts`
+пути к кастомному CanvasKit строятся через `import.meta.env.BASE_URL`,
+поэтому деплой под `/<repo-name>/` поддоменом работает без правок.
 
-В `vite.config.ts` стоит `base: './'`, поэтому ассеты резолвятся под
-поддиректорией.
+### Альтернативы
+
+**Vercel** — import репо на <https://vercel.com/new>, preset Vite,
+build `npm run build`, output `dist`. Деплой за минуту.
+
+**Netlify** — New site → connect repo. Build `npm run build`, publish `dist`.
 
 Кастомный бандл CanvasKit (~3-7 MB) попадает в дист из
 `public/canvaskit/`, если он там лежит. Чтобы задеплоить *без* него
@@ -208,7 +211,7 @@ npx gh-pages -d dist
 | UI с кнопками, просмотром сцены, экспортом PDF | ✅ |
 | `npm run dev/build/preview` | ✅ |
 | Загружено на GitHub | ✅ |
-| Задеплоено на бесплатный хостинг | пушу деплой следующим шагом |
+| Задеплоено на бесплатный хостинг | ✅ GitHub Pages, авто-деплой при push в main |
 
 ## Ограничения
 

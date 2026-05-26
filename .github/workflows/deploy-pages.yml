@@ -1,0 +1,61 @@
+# Build the Vite app and deploy to GitHub Pages.
+#
+# Чтобы это заработало в первый раз:
+#   Repo → Settings → Pages → Build and deployment → Source = GitHub Actions.
+#
+# После этого каждый push в main триггерит deploy.
+# Можно также запустить вручную (workflow_dispatch).
+#
+# Production URL берётся из output deploy-pages action и виден на странице
+# Environments → github-pages.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Не отменяем уже запущенный deploy: даём ему доехать до конца.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
