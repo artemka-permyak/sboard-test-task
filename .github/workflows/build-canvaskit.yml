@@ -91,52 +91,27 @@ jobs:
           print("Patched BUILD.gn")
           PY
 
-      - name: Write GN args + configure
+      - name: Enable SkPDF in compile.sh
         working-directory: ${{ env.SKIA_DIR }}
         run: |
-          mkdir -p out/canvaskit_pdf
-          cp "$GITHUB_WORKSPACE/build-canvaskit-pdf/gn_args.txt" out/canvaskit_pdf/args.gn
-          if [ ! -x bin/gn ]; then python3 bin/fetch-gn; fi
-          bin/gn gen out/canvaskit_pdf
+          # compile.sh defaults to skia_enable_pdf=false. Flip it.
+          # Also dump the patched section for sanity.
+          sed -i 's/skia_enable_pdf=false/skia_enable_pdf=true/' modules/canvaskit/compile.sh
+          grep -n 'skia_enable_pdf' modules/canvaskit/compile.sh
 
-      - name: List available canvaskit targets (diagnostic)
+      - name: Build CanvasKit via compile.sh
         working-directory: ${{ env.SKIA_DIR }}
         run: |
-          echo "::group::All targets containing 'canvas'"
-          ninja -C out/canvaskit_pdf -t targets all 2>/dev/null | grep -iE 'canvas' | head -50 || true
-          echo "::endgroup::"
-          echo "::group::Top-level phony targets"
-          ninja -C out/canvaskit_pdf -t targets rule phony 2>/dev/null | head -30 || true
-          echo "::endgroup::"
-
-      - name: Build (ninja canvaskit)
-        working-directory: ${{ env.SKIA_DIR }}
-        run: |
-          set -e
-          # Modern Skia may expose canvaskit under a namespaced path. Try
-          # several known names in order.
-          CANDIDATES=(
-            "canvaskit"
-            "modules/canvaskit/canvaskit"
-            "modules/canvaskit:canvaskit"
-            "canvaskit.js"
-          )
-          for t in "${CANDIDATES[@]}"; do
-            echo "Trying ninja target: $t"
-            if ninja -C out/canvaskit_pdf "$t"; then
-              echo "Built via target: $t"
-              exit 0
-            fi
-          done
-          echo "None of the candidate targets worked. Available canvas* targets:"
-          ninja -C out/canvaskit_pdf -t targets all | grep -i canvas | head -50
-          exit 1
+          # compile.sh sets is_canvaskit=true, fetches pinned gn+ninja,
+          # writes its own args.gn, and runs ninja canvaskit.js.
+          # Output goes to out/canvaskit_wasm by default.
+          ./modules/canvaskit/compile.sh
 
       - name: Stage artifacts
         run: |
           mkdir -p "$OUT_DIR"
-          cp "$SKIA_DIR/out/canvaskit_pdf/canvaskit.js"   "$OUT_DIR/"
-          cp "$SKIA_DIR/out/canvaskit_pdf/canvaskit.wasm" "$OUT_DIR/"
+          cp "$SKIA_DIR/out/canvaskit_wasm/canvaskit.js"   "$OUT_DIR/"
+          cp "$SKIA_DIR/out/canvaskit_wasm/canvaskit.wasm" "$OUT_DIR/"
           ls -lh "$OUT_DIR"
           echo "Bytes containing 'pdf' in wasm:"
           strings "$OUT_DIR/canvaskit.wasm" | grep -ic pdf || true
