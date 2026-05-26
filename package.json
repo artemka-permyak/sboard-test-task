@@ -1,0 +1,23 @@
+{
+  "name": "pixi-skia-pdf",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "build:canvaskit": "docker build -t canvaskit-pdf-builder ./build-canvaskit-pdf && docker run --rm -v \"$(pwd)/public/canvaskit:/output\" canvaskit-pdf-builder"
+  },
+  "dependencies": {
+    "canvaskit-wasm": "0.41.1",
+    "pdf-lib": "1.17.1",
+    "pixi.js-legacy": "7.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "25.9.1",
+    "typescript": "6.0.3",
+    "vite": "8.0.14"
+  }
+}

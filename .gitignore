@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Custom CanvasKit build output (large binary, regenerate via npm run build:canvaskit)
+public/canvaskit/canvaskit.wasm
+public/canvaskit/canvaskit.js
+!public/canvaskit/.gitkeep

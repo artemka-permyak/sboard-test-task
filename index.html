@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pixi → Skia → PDF</title>
+    <link rel="stylesheet" href="/src/styles/main.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <h1>Pixi → Skia → PDF</h1>
+      <p>
+        Single intermediate scene tree drives both the Skia (CanvasKit) renderer
+        and the vector PDF exporter (SkPDF if a custom CanvasKit is present, pdf-lib otherwise).
+      </p>
+    </header>
+
+    <main class="app-main">
+      <section class="controls">
+        <button id="btn-random" type="button">+ Random shape</button>
+        <button id="btn-reset" type="button">Reset scene</button>
+        <button id="btn-pdf" type="button">Export PDF</button>
+        <button id="btn-clear-log" type="button" class="ghost">Clear log</button>
+        <span class="status" id="status">Initializing…</span>
+      </section>
+
+      <section class="canvases">
+        <div class="canvas-card">
+          <h2>Canvas 1 — Pixi.js (Canvas2D)</h2>
+          <div id="pixi-mount" class="canvas-frame"></div>
+        </div>
+        <div class="canvas-card">
+          <h2>Canvas 2 — Skia (CanvasKit)</h2>
+          <canvas id="skia-canvas" class="canvas-frame" width="600" height="400"></canvas>
+        </div>
+      </section>
+
+      <p class="sync-note">Both canvases render the same scene tree.</p>
+
+      <section class="log-card">
+        <h3>Event log</h3>
+        <ul id="event-log" class="event-log"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
