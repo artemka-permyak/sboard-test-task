@@ -1,0 +1,121 @@
+# Build CanvasKit-wasm with the SkPDF backend on a GitHub-hosted Linux runner.
+#
+# Why: building locally on macOS/arm64 needs ~5 GB of Skia deps and is sensitive
+# to network flakiness. GitHub runners have native amd64 Linux + reliable
+# routing to googlesource.com, so git-sync-deps just works.
+#
+# How to use:
+#   1. Push the repo.
+#   2. Actions tab → "Build CanvasKit with SkPDF" → Run workflow.
+#   3. When it completes, download the `canvaskit-pdf` artifact (zip).
+#   4. Unzip its canvaskit.{js,wasm} into public/canvaskit/, commit, push.
+#   5. App now reports "PDF: SkPDF" in the status bar.
+
+name: Build CanvasKit with SkPDF
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: canvaskit-wasm + SkPDF
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    env:
+      SKIA_DIR: ${{ github.workspace }}/skia
+      EMSDK_VERSION: "3.1.74"
+      OUT_DIR: ${{ github.workspace }}/out
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build pkg-config lbzip2 build-essential python3 python3-distutils
+
+      - name: Clone depot_tools
+        run: |
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "${{ runner.temp }}/depot_tools"
+          echo "${{ runner.temp }}/depot_tools" >> "$GITHUB_PATH"
+
+      - name: Install Emscripten ${{ env.EMSDK_VERSION }}
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: "emsdk-cache"
+
+      - name: Verify emcc
+        run: emcc --version
+
+      - name: Clone Skia
+        run: git clone --depth 1 https://skia.googlesource.com/skia.git "$SKIA_DIR"
+
+      - name: Sync third-party deps
+        working-directory: ${{ env.SKIA_DIR }}
+        run: |
+          # On GH runners the upstream parallel sync is reliable.
+          # Retry a couple of times just in case a single repo hiccups.
+          for i in 1 2 3; do
+            python3 tools/git-sync-deps && exit 0
+            echo "git-sync-deps attempt $i failed; sleeping 15s"
+            sleep 15
+          done
+          exit 1
+
+      - name: Drop in PDF bindings extension
+        run: |
+          cp build-canvaskit-pdf/canvaskit_pdf_bindings.cpp \
+             "$SKIA_DIR/modules/canvaskit/canvaskit_pdf_bindings.cpp"
+
+      - name: Patch modules/canvaskit/BUILD.gn
+        working-directory: ${{ env.SKIA_DIR }}
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys
+          p = pathlib.Path("modules/canvaskit/BUILD.gn")
+          text = p.read_text()
+          needle = '"canvaskit_bindings.cpp"'
+          add = '"canvaskit_pdf_bindings.cpp"'
+          if add in text:
+              print("Already patched")
+              sys.exit(0)
+          if needle not in text:
+              sys.stderr.write(f"Could not find {needle} in BUILD.gn\n")
+              sys.exit(1)
+          text = text.replace(needle, f'{needle},\n    {add}', 1)
+          p.write_text(text)
+          print("Patched BUILD.gn")
+          PY
+
+      - name: Write GN args + configure
+        working-directory: ${{ env.SKIA_DIR }}
+        run: |
+          mkdir -p out/canvaskit_pdf
+          cp "$GITHUB_WORKSPACE/build-canvaskit-pdf/gn_args.txt" out/canvaskit_pdf/args.gn
+          if [ ! -x bin/gn ]; then python3 bin/fetch-gn; fi
+          bin/gn gen out/canvaskit_pdf
+
+      - name: Build (ninja canvaskit)
+        working-directory: ${{ env.SKIA_DIR }}
+        run: ninja -C out/canvaskit_pdf canvaskit
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p "$OUT_DIR"
+          cp "$SKIA_DIR/out/canvaskit_pdf/canvaskit.js"   "$OUT_DIR/"
+          cp "$SKIA_DIR/out/canvaskit_pdf/canvaskit.wasm" "$OUT_DIR/"
+          ls -lh "$OUT_DIR"
+          echo "Bytes containing 'pdf' in wasm:"
+          strings "$OUT_DIR/canvaskit.wasm" | grep -ic pdf || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: canvaskit-pdf
+          path: ${{ env.OUT_DIR }}
+          retention-days: 14
+          if-no-files-found: error

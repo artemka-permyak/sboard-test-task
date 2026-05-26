@@ -58,6 +58,19 @@ requires a reliable network to clone Skia's ~50 third-party deps** via
 environment, the app keeps working on the pdf-lib path — equivalent
 vector output, no architectural debt.
 
+For environments where local Docker can't reach googlesource.com
+reliably, there's a GitHub Actions workflow
+[`.github/workflows/build-canvaskit.yml`](.github/workflows/build-canvaskit.yml)
+that runs the same build on an Ubuntu runner and uploads
+`canvaskit.{js,wasm}` as a downloadable artifact:
+
+1. Push the repo to GitHub.
+2. Actions tab → **Build CanvasKit with SkPDF** → **Run workflow**.
+3. When it finishes, download the `canvaskit-pdf` artifact, unzip into
+   `public/canvaskit/`, commit, push.
+4. Status bar now shows **`PDF: SkPDF`** and `Export PDF` writes a real
+   Skia PDF.
+
 ## Production build
 
 ```bash
