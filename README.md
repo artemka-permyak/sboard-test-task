@@ -158,9 +158,16 @@ grep -E '\b(re|f|S|m|l|cm)\b' out.pdf | head
 У PDF из SkPDF в метаданных будет `/Producer (Skia/PDF …)`, у
 pdf-lib — `/Producer (pdf-lib …)`.
 
-В репо коммитнут `samples/sample.pdf` (1 КБ, генерируется Node-скриптом
-`scripts/generate-sample-pdf.mjs` через pdf-lib из аналогичной сцены)
-для быстрой проверки векторности без запуска dev-сервера.
+В репо коммитнуты два sample PDF:
+
+| Файл | Кем сгенерирован | Producer | Размер |
+|---|---|---|---|
+| `samples/sample-skia.pdf` | Реальный SkPDF из приложения (Export PDF) | `Skia/PDF m150` | ~23 КБ |
+| `samples/sample.pdf` | Node-скрипт `scripts/generate-sample-pdf.mjs` через pdf-lib | `pdf-lib` | ~1 КБ |
+
+`sample-skia.pdf` — это **итоговый артефакт для submit**. В нём 1029
+векторных операторов (`re` / `f` / `S` / `B` / `m` / `l` / `c` / `cm`) и
+ровно один image XObject — PNG-спрайт (как разрешено ТЗ).
 
 ## Деплой
 
